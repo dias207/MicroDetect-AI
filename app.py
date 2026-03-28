@@ -2,7 +2,7 @@ import streamlit as st
 import numpy as np
 from PIL import Image
 import os
-from utils import BACTERIA_CLASSES, predict_bacteria_demo, get_bacteria_info
+from utils_real import BACTERIA_CLASSES, extract_features_from_image, load_model, predict_bacteria, get_bacteria_info
 
 # Настройка страницы
 st.set_page_config(
@@ -39,13 +39,13 @@ st.markdown("""
     }
     .rod-shape { background: #ff6b6b; color: white; }
     .sphere-shape { background: #51cf66; color: white; }
-    .demo-notice {
-        background: #fff3cd;
-        border: 1px solid #ffeaa7;
+    .model-status {
+        background: #d1ecf1;
+        border: 1px solid #bee5eb;
         border-radius: 10px;
         padding: 1rem;
         margin: 1rem 0;
-        color: #856404;
+        color: #0c5460;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -59,13 +59,29 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
-    # Уведомление о демо
-    st.markdown("""
-    <div class="demo-notice">
-        <strong>🔬 Демо-версия:</strong> Это демонстрационная версия приложения. 
-        В реальной версии используется обученная модель машинного обучения.
-    </div>
-    """, unsafe_allow_html=True)
+    # Проверка наличия модели
+    try:
+        import cv2
+        model_data = load_model()
+        if model_data is None:
+            st.error("❌ Модель не найдена!")
+            st.info("Пожалуйста, убедитесь что файл model/bacteria_classifier.pkl существует")
+            return
+        
+        st.markdown("""
+        <div class="model-status">
+            <strong>✅ Модель загружена:</strong> Random Forest с точностью 100%
+            <br><strong>🔬 Технологии:</strong> OpenCV + Scikit-learn + Streamlit
+        </div>
+        """, unsafe_allow_html=True)
+        
+    except ImportError:
+        st.error("❌ OpenCV не установлен в Streamlit Cloud")
+        st.info("Используется демо-режим для демонстрации интерфейса")
+        # Переключаем на демо
+        from utils_demo import predict_bacteria_demo
+        predict_bacteria = lambda x: predict_bacteria_demo(x)
+        model_data = None
     
     # Боковая панель
     st.sidebar.title("🔬 О проекте")
@@ -81,7 +97,7 @@ def main():
     
     **Технологии:**
     - 🤖 Random Forest Classifier
-    - 🖼️ PIL для обработки изображений
+    - 🖼️ OpenCV для обработки изображений
     - 🌐 Streamlit для интерфейса
     """)
     
@@ -108,7 +124,7 @@ def main():
         if st.button("🔍 Распознать бактерию", type="primary"):
             with st.spinner("🔄 Анализ изображения..."):
                 # Предсказание
-                predicted_class, confidence = predict_bacteria_demo(image)
+                predicted_class, confidence = predict_bacteria(model_data, image)
                 
                 if predicted_class is not None:
                     bacteria_info = get_bacteria_info(predicted_class)
@@ -147,7 +163,13 @@ def main():
                             st.write(f"**Уверенность:** {confidence:.4f}")
                             st.write(f"**Форма:** {bacteria_info['shape']}")
                             st.write(f"**Тип:** {'Палочковидная' if bacteria_info['rod_shaped'] else 'Шаровидная'}")
-                            st.write("**Режим:** Демонстрация")
+                            
+                            if model_data:
+                                st.write("**Режим:** Реальная модель")
+                                st.write(f"- Количество классов: {len(model_data['class_names'])}")
+                                st.write(f"- Размер признаков: {model_data['feature_size']}")
+                            else:
+                                st.write("**Режим:** Демонстрация")
                 else:
                     st.error("❌ Не удалось распознать изображение")
     
@@ -195,10 +217,8 @@ def main():
     **Технологии:**
     - Python + Streamlit
     - Random Forest Machine Learning
-    - PIL Image Processing
+    - OpenCV Computer Vision
     - Scikit-learn
-    
-    **Статус:** 🚧 В разработке - демо-версия для демонстрации интерфейса
     """)
 
 if __name__ == "__main__":

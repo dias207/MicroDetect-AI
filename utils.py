@@ -2,7 +2,8 @@ import streamlit as st
 import numpy as np
 from PIL import Image
 import os
-import random
+import pickle
+import cv2
 
 # Классы бактерий и их характеристики
 BACTERIA_CLASSES = {
@@ -38,24 +39,115 @@ BACTERIA_CLASSES = {
     }
 }
 
-def predict_bacteria_demo(image):
-    """Демо-предсказание - случайный класс с высокой уверенностью"""
+def extract_features_from_image(image, target_size=(64, 64)):
+    """Извлечение признаков из изображения - точно как в обучении"""
     try:
-        # Анализ изображения для более "реалистичного" предсказания
-        img_array = np.array(image)
+        # Конвертация в numpy array если нужно
+        if isinstance(image, Image.Image):
+            img_array = np.array(image)
+            if len(img_array.shape) == 3:
+                img = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+            else:
+                img = img_array
+        else:
+            img = image
         
-        # Простая эвристика на основе размера изображения
-        if img_array.shape[0] > 300:  # Большое изображение
-            confidence = random.uniform(0.85, 0.95)
-        else:  # Маленькое изображение
-            confidence = random.uniform(0.75, 0.90)
+        # Изменение размера
+        img = cv2.resize(img, target_size)
         
-        # Случайный выбор класса
-        predicted_class = random.randint(0, 4)
+        # Конвертация в grayscale
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        # Извлечение признаков (точно как в train_model_simple.py)
+        features = []
+        
+        # 1. Гистограмма градиентов
+        gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0)
+        gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1)
+        mag, ang = cv2.cartToPolar(gx, gy)
+        
+        bins = np.int32(16*ang/(2*np.pi))
+        bin_cells = bins[:16,:16], bins[16:,:16], bins[:16,16:], bins[16:,16:]
+        mag_cells = mag[:16,:16], mag[16:,:16], mag[:16,16:], mag[16:,16:]
+        hists = [np.bincount(b.ravel(), m.ravel(), 16) for b, m in zip(bin_cells, mag_cells)]
+        hist = np.hstack(hists)
+        features.extend(hist)
+        
+        # 2. Статистические признаки
+        features.extend([
+            np.mean(gray),
+            np.std(gray),
+            np.min(gray),
+            np.max(gray),
+            np.median(gray)
+        ])
+        
+        # 3. Текстурные признаки
+        diff_x = np.diff(gray, axis=1).ravel()
+        diff_y = np.diff(gray, axis=0).ravel()
+        
+        features.extend([
+            np.mean(diff_x),
+            np.std(diff_x),
+            np.mean(diff_y),
+            np.std(diff_y)
+        ])
+        
+        # 4. Форма бактерий
+        contours, _ = cv2.findContours(gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        if contours:
+            largest_contour = max(contours, key=cv2.contourArea)
+            area = cv2.contourArea(largest_contour)
+            perimeter = cv2.arcLength(largest_contour, True)
+            
+            if perimeter > 0:
+                circularity = 4 * np.pi * area / (perimeter ** 2)
+            else:
+                circularity = 0
+            
+            x, y, w, h = cv2.boundingRect(largest_contour)
+            aspect_ratio = w / h if h > 0 else 0
+            
+            features.extend([area, perimeter, circularity, aspect_ratio])
+        else:
+            features.extend([0, 0, 0, 0])
+        
+        return np.array(features)
+        
+    except Exception as e:
+        print(f"Ошибка при обработке изображения: {e}")
+        return None
+
+def load_model():
+    """Загрузка обученной модели"""
+    try:
+        model_path = 'model/bacteria_classifier.pkl'
+        with open(model_path, 'rb') as f:
+            model_data = pickle.load(f)
+        return model_data
+    except Exception as e:
+        print(f"Ошибка при загрузке модели: {e}")
+        return None
+
+def predict_bacteria(model_data, image):
+    """Предсказание типа бактерии"""
+    try:
+        # Извлечение признаков
+        features = extract_features_from_image(image)
+        if features is None:
+            return None, 0.0
+        
+        # Предсказание
+        model = model_data['model']
+        predictions = model.predict_proba([features])[0]
+        predicted_class = np.argmax(predictions)
+        confidence = np.max(predictions)
         
         return predicted_class, confidence
         
     except Exception as e:
+        print(f"Ошибка при предсказании: {e}")
         return None, 0.0
 
 def get_bacteria_info(class_id):
