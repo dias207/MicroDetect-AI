@@ -2,7 +2,7 @@ import streamlit as st
 import numpy as np
 from PIL import Image
 import os
-from utils_demo import BACTERIA_CLASSES, predict_bacteria_demo, get_bacteria_info
+from utils import BACTERIA_CLASSES, predict_bacteria_demo, get_bacteria_info
 
 # Настройка страницы
 st.set_page_config(
