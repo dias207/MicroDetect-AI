@@ -1,7 +1,6 @@
 import streamlit as st
 import numpy as np
 from PIL import Image
-import cv2
 import os
 import pickle
 
@@ -40,78 +39,88 @@ BACTERIA_CLASSES = {
 }
 
 def extract_features_from_image(image, target_size=(64, 64)):
-    """Извлечение признаков из изображения"""
+    """Извлечение признаков из изображения без OpenCV"""
     try:
-        # Конвертация в numpy array если нужно
-        if isinstance(image, Image.Image):
-            img_array = np.array(image)
-            if len(img_array.shape) == 3:
-                img = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-            else:
-                img = img_array
-        else:
-            img = image
+        # Конвертация в numpy array
+        img_array = np.array(image)
         
         # Изменение размера
-        img = cv2.resize(img, target_size)
+        img = Image.fromarray(img_array).resize(target_size)
         
         # Конвертация в grayscale
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        if len(img_array.shape) == 3:
+            gray = img.convert('L')
+        else:
+            gray = img
+        
+        gray_array = np.array(gray)
         
         # Извлечение признаков
         features = []
         
-        # 1. Гистограмма градиентов
-        gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0)
-        gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1)
-        mag, ang = cv2.cartToPolar(gx, gy)
-        
-        bins = np.int32(16*ang/(2*np.pi))
-        bin_cells = bins[:16,:16], bins[16:,:16], bins[:16,16:], bins[16:,16:]
-        mag_cells = mag[:16,:16], mag[16:,:16], mag[:16,16:], mag[16:,16:]
-        hists = [np.bincount(b.ravel(), m.ravel(), 16) for b, m in zip(bin_cells, mag_cells)]
-        hist = np.hstack(hists)
-        features.extend(hist)
-        
-        # 2. Статистические признаки
+        # 1. Простые статистические признаки
         features.extend([
-            np.mean(gray),
-            np.std(gray),
-            np.min(gray),
-            np.max(gray),
-            np.median(gray)
+            np.mean(gray_array),
+            np.std(gray_array),
+            np.min(gray_array),
+            np.max(gray_array),
+            np.median(gray_array)
         ])
         
-        # 3. Текстурные признаки
-        diff_x = np.diff(gray, axis=1).ravel()
-        diff_y = np.diff(gray, axis=0).ravel()
+        # 2. Гистограмма (16 бинов)
+        hist, _ = np.histogram(gray_array, bins=16, range=(0, 256))
+        features.extend(hist.tolist())
         
+        # 3. Текстурные признаки (упрощенные)
+        # Горизонтальные разницы
+        h_diff = np.diff(gray_array, axis=1)
         features.extend([
-            np.mean(diff_x),
-            np.std(diff_x),
-            np.mean(diff_y),
-            np.std(diff_y)
+            np.mean(h_diff),
+            np.std(h_diff)
         ])
         
-        # 4. Форма бактерий
-        contours, _ = cv2.findContours(gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # Вертикальные разницы
+        v_diff = np.diff(gray_array, axis=0)
+        features.extend([
+            np.mean(v_diff),
+            np.std(v_diff)
+        ])
         
-        if contours:
-            largest_contour = max(contours, key=cv2.contourArea)
-            area = cv2.contourArea(largest_contour)
-            perimeter = cv2.arcLength(largest_contour, True)
-            
-            if perimeter > 0:
-                circularity = 4 * np.pi * area / (perimeter ** 2)
-            else:
-                circularity = 0
-            
-            x, y, w, h = cv2.boundingRect(largest_contour)
-            aspect_ratio = w / h if h > 0 else 0
-            
-            features.extend([area, perimeter, circularity, aspect_ratio])
+        # 4. Признаки формы (упрощенные)
+        # Бинаризация для поиска контуров
+        threshold = np.mean(gray_array)
+        binary = gray_array > threshold
+        
+        # Площадь "бактерий"
+        area = np.sum(binary)
+        
+        # Периметр (упрощенный)
+        perimeter = 0
+        for i in range(binary.shape[0]):
+            for j in range(binary.shape[1]):
+                if binary[i, j]:
+                    # Проверяем соседей
+                    if i > 0 and not binary[i-1, j]:
+                        perimeter += 1
+                    if i < binary.shape[0]-1 and not binary[i+1, j]:
+                        perimeter += 1
+                    if j > 0 and not binary[i, j-1]:
+                        perimeter += 1
+                    if j < binary.shape[1]-1 and not binary[i, j+1]:
+                        perimeter += 1
+        
+        # Отношение сторон bounding box
+        white_pixels = np.where(binary)
+        if len(white_pixels[0]) > 0:
+            h_min, h_max = np.min(white_pixels[0]), np.max(white_pixels[0])
+            w_min, w_max = np.min(white_pixels[1]), np.max(white_pixels[1])
+            height = h_max - h_min + 1
+            width = w_max - w_min + 1
+            aspect_ratio = width / height if height > 0 else 0
         else:
-            features.extend([0, 0, 0, 0])
+            aspect_ratio = 0
+        
+        features.extend([area, perimeter, aspect_ratio])
         
         return np.array(features)
         

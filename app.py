@@ -1,9 +1,8 @@
 import streamlit as st
 import numpy as np
 from PIL import Image
-import cv2
 import os
-from utils_github import BACTERIA_CLASSES, extract_features_from_image, load_model, predict_bacteria, get_bacteria_info
+from utils_nocv import BACTERIA_CLASSES, extract_features_from_image, load_model, predict_bacteria, get_bacteria_info
 
 # Настройка страницы
 st.set_page_config(
@@ -66,8 +65,8 @@ def main():
     
     **Технологии:**
     - 🤖 Random Forest Classifier
-    - 🖼️ OpenCV для обработки изображений
-    - 🌐 Streamlit для интерфейсa
+    - 🖼️ PIL для обработки изображений
+    - 🌐 Streamlit для интерфейса
     """)
     
     # Проверка наличия модели
@@ -194,13 +193,13 @@ def main():
     **MicroDetect AI** - это проект для дипломной/научной работы по распознаванию бактерий.
     
     **Ссылки:**
-    - 📁 [GitHub Repository](https://github.com/ВАШ_НИК/MicroDetect-AI)
-    - 🎓 [Документация](https://github.com/ВАШ_НИК/MicroDetect-AI/blob/main/README.md)
+    - 📁 [GitHub Repository](https://github.com/dias207/MicroDetect-AI)
+    - 🎓 [Документация](https://github.com/dias207/MicroDetect-AI/blob/main/README.md)
     
     **Технологии:**
     - Python + Streamlit
     - Random Forest Machine Learning
-    - OpenCV Computer Vision
+    - PIL Image Processing
     - Scikit-learn
     """)
 
