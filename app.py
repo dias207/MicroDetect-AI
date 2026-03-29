@@ -189,7 +189,7 @@ def analyze_image(image):
 
 # Создание интерфейса Gradio
 def create_interface():
-    with gr.Blocks(title="MicroDetect AI", theme=gr.themes.Soft()) as demo:
+    with gr.Blocks() as demo:
         gr.Markdown("""
         # 🦠 MicroDetect AI
         ## Интеллектуальная система распознавания бактерий
@@ -264,4 +264,4 @@ def create_interface():
 # Запуск приложения
 if __name__ == "__main__":
     demo = create_interface()
-    demo.launch()
+    demo.launch(share=True, server_name="0.0.0.0", server_port=7860)
